@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página de Recetas</title>
+    <link rel="stylesheet" href="recetario.css">
+</head>
+<body>
+    <h1>Recetario</h1>
+
+    <!-- Botón para abrir el formulario -->
+    <button id="btnNuevaReceta">Nueva Receta</button>
+    
+    <div class="form-container" id="form-container" style="display: none;">
+        <h2>Nueva Receta</h2>
+        <input type="hidden" id="recetaId"> <!-- Para saber si estamos editando -->
+        <input type="text" id="titulo" placeholder="Título de la receta" required><br>
+        <input type="text" id="imagen" placeholder="URL de la imagen"><br>
+        <textarea id="descripcion" placeholder="Descripción breve"></textarea><br>
+        <textarea id="ingredientes" placeholder="Ingredientes (separados por salto de línea)"></textarea><br>
+        <textarea id="instrucciones" placeholder="Instrucciones (separadas por salto de línea)"></textarea><br>
+        <button id="btnGuardarReceta">Guardar Receta</button>
+    </div>
+    
+    <h2>Lista de Recetas</h2>
+    <div id="lista-recetas"></div>
+
+    <script>
+        document.getElementById("btnNuevaReceta").addEventListener("click", function() {
+            document.getElementById("form-container").style.display = "block";
+            document.getElementById("recetaId").value = ""; // Resetear ID al crear una nueva receta
+        });
+    </script>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js';
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRoT3_oU0yERon7mmlXwJLeo-pIiCw-T8",
+            authDomain: "recetario-7b157.firebaseapp.com",
+            databaseURL: "https://recetario-7b157-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "recetario-7b157",
+            storageBucket: "recetario-7b157.firebasestorage.app",
+            messagingSenderId: "624492894708",
+            appId: "1:624492894708:web:cb28ee51a897831fca01a1",
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function agregarReceta() {
+            let id = document.getElementById("recetaId").value;
+            let titulo = document.getElementById("titulo").value;
+            let imagen = document.getElementById("imagen").value;
+            let descripcion = document.getElementById("descripcion").value;
+            let ingredientes = document.getElementById("ingredientes").value.split("\n");
+            let instrucciones = document.getElementById("instrucciones").value.split("\n");
+
+            if (!titulo || !imagen || ingredientes.length === 0 || instrucciones.length === 0) {
+                alert("Por favor, complete los campos obligatorios");
+                return;
+            }
+
+            try {
+                if (id) {
+                    // Actualizar receta existente
+                    await updateDoc(doc(db, "recetas", id), {
+                        titulo,
+                        imagen,
+                        descripcion,
+                        ingredientes,
+                        instrucciones
+                    });
+                    alert("Receta actualizada correctamente");
+                } else {
+                    // Agregar nueva receta
+                    await addDoc(collection(db, "recetas"), {
+                        titulo,
+                        imagen,
+                        descripcion,
+                        ingredientes,
+                        instrucciones
+                    });
+                    alert("Receta guardada correctamente");
+                }
+
+                document.getElementById("form-container").style.display = "none";
+                cargarRecetas();
+            } catch (e) {
+                console.error("Error al guardar la receta: ", e);
+            }
+        }
+
+        async function cargarRecetas() {
+            const querySnapshot = await getDocs(collection(db, "recetas"));
+            let listaRecetas = document.getElementById("lista-recetas");
+            listaRecetas.innerHTML = '';
+
+            querySnapshot.forEach(doc => {
+                mostrarReceta(doc.id, doc.data());
+            });
+        }
+
+        function mostrarReceta(id, receta) {
+            let recetaDiv = document.createElement("div");
+            recetaDiv.classList.add("receta");
+
+            recetaDiv.innerHTML = `
+                <h3>${receta.titulo}</h3>
+                <img src="${receta.imagen}" alt="${receta.titulo}" class="receta-img">
+                <div class="contenido-receta" style="display: none;">
+                    <p><strong>Descripción:</strong> ${receta.descripcion}</p>
+                    <strong>Ingredientes:</strong>
+                    <ul>${receta.ingredientes.map(ing => `<li>${ing}</li>`).join('')}</ul>
+                    <strong>Instrucciones:</strong>
+                    <ol>${receta.instrucciones.map(ins => `<li>${ins}</li>`).join('')}</ol>
+                </div>
+                <button class="editar-btn" data-id="${id}">✏️ Editar</button>
+                <button class="borrar-btn" data-id="${id}">🗑️ Borrar</button>
+            `;
+
+            recetaDiv.addEventListener("click", function() {
+                let contenido = recetaDiv.querySelector(".contenido-receta");
+                contenido.style.display = (contenido.style.display === "none" || contenido.style.display === "") ? "block" : "none";
+            });
+
+            recetaDiv.querySelector(".editar-btn").addEventListener("click", function(event) {
+                event.stopPropagation();
+                editarReceta(id, receta);
+            });
+
+            recetaDiv.querySelector(".borrar-btn").addEventListener("click", function(event) {
+                event.stopPropagation();
+                borrarReceta(id);
+            });
+
+            document.getElementById("lista-recetas").appendChild(recetaDiv);
+        }
+
+        function editarReceta(id, receta) {
+            document.getElementById("recetaId").value = id;
+            document.getElementById("titulo").value = receta.titulo;
+            document.getElementById("imagen").value = receta.imagen;
+            document.getElementById("descripcion").value = receta.descripcion;
+            document.getElementById("ingredientes").value = receta.ingredientes.join("\n");
+            document.getElementById("instrucciones").value = receta.instrucciones.join("\n");
+
+            document.getElementById("form-container").style.display = "block";
+        }
+
+        async function borrarReceta(id) {
+            if (confirm("¿Estás seguro de que deseas borrar esta receta?")) {
+                try {
+                    await deleteDoc(doc(db, "recetas", id));
+                    alert("Receta eliminada correctamente");
+                    cargarRecetas();
+                } catch (e) {
+                    console.error("Error al eliminar la receta: ", e);
+                }
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            cargarRecetas();
+            document.getElementById("btnGuardarReceta").addEventListener("click", agregarReceta);
+        });
+    </script>
+
+</body>
+</html>
